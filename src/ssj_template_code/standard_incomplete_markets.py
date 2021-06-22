@@ -133,7 +133,7 @@ def get_lottery(a, a_grid):
     return a_i, a_pi
 
 
-@numba.njit
+# @numba.njit
 def forward_policy(D, a_i, a_pi):
     Dend = np.zeros_like(D)
     for s in range(a_i.shape[0]):
