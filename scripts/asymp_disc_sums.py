@@ -14,10 +14,10 @@ ss = sim.steady_state(**sim.example_calibration())
 
 T = 300
 h = 1e-4
-shocks = {'r': 1.}  # Here, ex-post r
+shocked_inputs = {'r': 1.}  # Here, ex-post r
 
-curlyYs, curlyDs = fn.get_curlyYs_curlyDs(ss, T, shocks, h=h)
-curlyEs = fn.get_curlyEs(ss, T)
+# curlyYs, curlyDs = fn.get_curlyYs_curlyDs(ss, T, shocked_inputs, h=h)
+# curlyEs = fn.get_curlyEs(ss, T)
 
 # New way of getting cumulative sums of curlyYs, curlyDs, and curlyEs, solving for tolerances as opposed to
 # specifying a given T ex-ante
@@ -26,37 +26,12 @@ outputs = ['A', 'C']
 back_iter_vars = ['Va']
 back_iter_outputs = ['Va', 'a', 'c']
 policy = ['a']
-shocked_inputs = {'r': 1.}
 ss_policy_repr = ads.get_sparse_ss_policy_repr(ss, policy)
 outputs_ss_vals = sim.backward_iteration(**{i: ss[i] for i in inputs})
 
-# The T - 1 shocked inputs
-curlyVs_Tm1, curlyDs_Tm1, curlyYs_Tm1 = ads.backward_step_fakenews(ss, sim.backward_iteration, inputs, outputs,
-                                                                   back_iter_vars, back_iter_outputs,
-                                                                   policy, shocked_inputs, h=h,
-                                                                   ss_policy_repr=ss_policy_repr,
-                                                                   outputs_ss_vals=outputs_ss_vals)
 
-# The T - 2 shocked inputs
-ss_Tm2 = copy.deepcopy(ss)
-ss_Tm2["Va"] = ss["Va"] + curlyVs_Tm1["Va"] * h
-shocked_inputs_Tm2 = {}  # Probably a more efficient way to implement in the code to not calculate a shock
-curlyVs_Tm2, curlyDs_Tm2, curlyYs_Tm2 = ads.backward_step_fakenews(ss_Tm2, sim.backward_iteration, inputs, outputs,
-                                                                   back_iter_vars, back_iter_outputs,
-                                                                   policy, {}, h=h, outputs_ss_vals=outputs_ss_vals)
-
-curlyDs_comp_Tm1 = curlyDs["r"][0]
-curlyDdiff_Tm1 = curlyDs_Tm1 - curlyDs_comp_Tm1
-curlyDmaxdiffs_Tm1 = np.max(np.abs(curlyDdiff_Tm1), axis=1)
-
-curlyDs_comp_Tm2 = curlyDs["r"][1]
-curlyDdiff_Tm2 = curlyDs_Tm2 - curlyDs_comp_Tm2
-curlyDmaxdiffs_Tm2 = np.max(np.abs(curlyDdiff_Tm2), axis=1)
-
-assert np.isclose(curlyYs_Tm1["A"], curlyYs["A"]["r"][0])
-assert np.isclose(curlyYs_Tm1["C"], curlyYs["C"]["r"][0])
-assert np.all(np.isclose(curlyDs_Tm1, curlyDs["r"][0]))
-
-assert np.isclose(curlyYs_Tm2["A"], curlyYs["A"]["r"][1])
-assert np.isclose(curlyYs_Tm2["C"], curlyYs["C"]["r"][1])
-assert np.all(np.isclose(curlyDs_Tm2, curlyDs["r"][1]))
+curlyDs_sum, curlyYs_sum, T_endo = ads.asymp_disc_sums(ss, sim.backward_iteration, inputs, outputs,
+                                                       back_iter_vars, back_iter_outputs,
+                                                       policy, shocked_inputs, h=h,
+                                                       ss_policy_repr=ss_policy_repr, outputs_ss_vals=outputs_ss_vals,
+                                                       verbose=True)

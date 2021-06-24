@@ -4,8 +4,48 @@ import numpy as np
 
 from sequence_jacobian.utilities import differentiate, interpolate, forward_step
 
-# Most of the below code is borrowed and modified slightly from the HetBlock code, s.t. the optimal_policy repo only
-# relies on SSJ utilities for now, as opposed to the entire code infrastructure.
+
+def asymp_disc_sums(ss, back_step_fun, inputs, outputs, back_iter_vars, back_iter_outputs, policy, shocked_inputs,
+                    h=1e-4, recompute_policy_grid=True, ss_policy_repr=None, outputs_ss_vals=None,
+                    verbose=False, maxit=1000, tol=1e-8):
+
+    for i in range(maxit):
+        if i == 0:
+            curlyVs, curlyDs, curlyYs = backward_step_fakenews(ss, back_step_fun, inputs, outputs,
+                                                               back_iter_vars, back_iter_outputs,
+                                                               policy, shocked_inputs, h=h,
+                                                               recompute_policy_grid=recompute_policy_grid,
+                                                               ss_policy_repr=ss_policy_repr,
+                                                               outputs_ss_vals=outputs_ss_vals)
+            curlyDs_sum, curlyYs_sum = curlyDs, curlyYs
+        else:
+            ss_new = ss.copy()
+            ss_new["Va"] = ss["Va"] + curlyVs["Va"] * h
+            curlyVs, curlyDs, curlyYs = backward_step_fakenews(ss_new, back_step_fun, inputs, outputs,
+                                                               back_iter_vars, back_iter_outputs,
+                                                               policy, {}, h=h,
+                                                               recompute_policy_grid=recompute_policy_grid,
+                                                               outputs_ss_vals=outputs_ss_vals)
+            # TODO: An optimization later could be not calculating curlyYs or curlyDs if either converges earlier
+            curlyDs_sum += ss["beta"] ** -i * curlyDs
+            for o in outputs:
+                curlyYs_sum[o] += ss["beta"] ** -i * curlyYs[o]
+
+        # TODO: Consolidate this post-debugging
+        curlyD_abs_diff = np.abs(ss["beta"] ** -i * curlyDs)
+        curlyY_abs_diff = {}
+        for o in outputs:
+            curlyY_abs_diff[o] = np.abs(ss["beta"] ** -i * curlyYs[o])
+        curlyD_max_abs_diff = np.max(curlyD_abs_diff)
+        curlyY_max_abs_diff = np.max(np.array([np.max(curlyY_abs_diff[o]) for o in outputs]))
+
+        if i % 10 == 1 and verbose:
+            print(f"Iteration {i} max abs change in curlyD sum is {curlyD_max_abs_diff} and in curlyY sum is {curlyY_max_abs_diff}")
+        if i % 10 == 1 and curlyD_max_abs_diff < tol and curlyY_max_abs_diff < tol:
+            return curlyDs_sum, curlyYs_sum, i
+        if i == maxit - 1:
+            raise ValueError(f'No convergence of asymptotic discounted sums after {maxit} iterations!')
+
 
 # Need to be careful about setting `h`, since the initial `h`-scaled shock is not be computed in this current step,
 # compared to the structure of the old get_curlyYs_curlyDs function.
