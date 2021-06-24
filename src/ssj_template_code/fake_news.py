@@ -73,7 +73,7 @@ def get_curlyYs_curlyDs(ss, T, shocks, h=1E-4):
 
 """Step 2: get curlyEs from expectations iteration"""
 
-# @numba.njit
+@numba.njit
 def expectations_iteration(X, Pi, a_i, a_pi):
     """If X is n_s*n_a array of values at each gridpoint tomorrow,
     what is the expected value at each gridpoint today?"""
@@ -121,7 +121,7 @@ def get_curlyEs(ss, T):
 
 """Step 3: obtain fake news matrix from curlyY, curlyD, curlyE"""
 
-# @numba.njit
+@numba.njit
 def fake_news(curlyY, curlyD, curlyE):
     T = len(curlyY)
     F = np.empty((T, T))
