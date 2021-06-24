@@ -26,41 +26,8 @@ ss_policy_repr = ads.get_sparse_ss_policy_repr(ss, policy)
 outputs_ss_vals = sim.backward_iteration(**{i: ss[i] for i in inputs})
 
 
-# # Test ergodicity of curlyEs
-# T = 1000
-# curlyEs = fn.get_curlyEs(ss, T)
-# curlyEs_A_at_T = curlyEs["A"][-1, ...]
-# assert np.all(np.isclose(curlyEs_A_at_T, np.vdot(ss["D"], ss["a"])))
-
-
-# curlyEs_sum, T_endo = ads.asymp_disc_sum_curlyE(ss, outputs, policy, demean=True, ss_policy_repr=ss_policy_repr,
-#                                                 verbose=True)
-
-
 # Test full asymp disc sum
 curlyDs_sum, curlyYs_sum, curlyEs_sum, Ts = ads.asymp_disc_sums(ss, sim.backward_iteration, inputs, outputs,
                                                                 back_iter_vars, back_iter_outputs, policy,
                                                                 shocked_inputs, h=h, ss_policy_repr=ss_policy_repr,
                                                                 outputs_ss_vals=outputs_ss_vals, verbose=True)
-
-
-# curlyDs_sum, curlyYs_sum, T_endo = ads.asymp_disc_sums(ss, sim.backward_iteration, inputs, outputs,
-#                                                        back_iter_vars, back_iter_outputs,
-#                                                        policy, shocked_inputs, h=h,
-#                                                        ss_policy_repr=ss_policy_repr, outputs_ss_vals=outputs_ss_vals,
-#                                                        verbose=True)
-
-# curlyYs, curlyDs = fn.get_curlyYs_curlyDs(ss, T_endo, shocked_inputs, h=h)
-#
-# curlyYs_sum_manual, curlyDs_sum_manual = {}, np.empty_like(curlyDs["r"])
-# for t in range(T_endo):
-#     curlyDs_sum_manual += ss["beta"] ** -t * curlyDs["r"][t, ...]
-#     for o in outputs:
-#         if t == 0:
-#             curlyYs_sum_manual[o] = ss["beta"] ** -t * curlyYs[o]["r"][t]
-#         else:
-#             curlyYs_sum_manual[o] += ss["beta"] ** -t * curlyYs[o]["r"][t]
-#
-# assert np.all(np.isclose(curlyDs_sum, curlyDs_sum_manual))
-# for o in outputs:
-#     assert np.isclose(curlyYs_sum[o], curlyYs_sum_manual[o])

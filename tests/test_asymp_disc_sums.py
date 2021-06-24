@@ -9,25 +9,19 @@ import src.asymp_disc_sums as ads
 
 
 # Testing modified backward_step that is independent of SSJ against the template code
-def test_backward_step_fakenews():
+def test_backward_step_fakenews(sim_model):
+    # Load the model variables
+    ss, back_step_fun, inputs, outputs, back_iter_vars, back_iter_outputs, policy, ss_policy_repr, outputs_ss_vals = sim_model
+
+    # Test settings
     T = 3
     h = 1e-4
     shocked_inputs = {'r': 1.}  # Here, ex-post r
 
-    ss = sim.steady_state(**sim.example_calibration())
-
-    inputs = ['Va', 'Pi', 'a_grid', 'y', 'r', 'beta', 'eis']
-    outputs = ['A', 'C']
-    back_iter_vars = ['Va']
-    back_iter_outputs = ['Va', 'a', 'c']
-    policy = ['a']
-    ss_policy_repr = ads.get_sparse_ss_policy_repr(ss, policy)
-    outputs_ss_vals = sim.backward_iteration(**{i: ss[i] for i in inputs})
-
     curlyYs, curlyDs = fn.get_curlyYs_curlyDs(ss, T, shocked_inputs, h=h)
 
     # The T - 1 shocked inputs
-    curlyVs_Tm1, curlyDs_Tm1, curlyYs_Tm1 = ads.backward_step_fakenews(ss, sim.backward_iteration, inputs, outputs,
+    curlyVs_Tm1, curlyDs_Tm1, curlyYs_Tm1 = ads.backward_step_fakenews(ss, back_step_fun, inputs, outputs,
                                                                        back_iter_vars, back_iter_outputs,
                                                                        policy, shocked_inputs, h=h,
                                                                        ss_policy_repr=ss_policy_repr,
@@ -36,14 +30,14 @@ def test_backward_step_fakenews():
     # The T - 2 shocked inputs
     ss_Tm2 = copy.deepcopy(ss)
     ss_Tm2["Va"] = ss["Va"] + curlyVs_Tm1["Va"] * h
-    curlyVs_Tm2, curlyDs_Tm2, curlyYs_Tm2 = ads.backward_step_fakenews(ss_Tm2, sim.backward_iteration, inputs, outputs,
+    curlyVs_Tm2, curlyDs_Tm2, curlyYs_Tm2 = ads.backward_step_fakenews(ss_Tm2, back_step_fun, inputs, outputs,
                                                                        back_iter_vars, back_iter_outputs,
                                                                        policy, {}, h=h, outputs_ss_vals=outputs_ss_vals)
 
     # The T - 3 shocked inputs
     ss_Tm3 = copy.deepcopy(ss)
     ss_Tm3["Va"] = ss["Va"] + curlyVs_Tm2["Va"] * h
-    curlyVs_Tm3, curlyDs_Tm3, curlyYs_Tm3 = ads.backward_step_fakenews(ss_Tm3, sim.backward_iteration, inputs, outputs,
+    curlyVs_Tm3, curlyDs_Tm3, curlyYs_Tm3 = ads.backward_step_fakenews(ss_Tm3, back_step_fun, inputs, outputs,
                                                                        back_iter_vars, back_iter_outputs,
                                                                        policy, {}, h=h, outputs_ss_vals=outputs_ss_vals)
 
@@ -67,3 +61,60 @@ def test_backward_step_fakenews():
     assert np.isclose(curlyYs_Tm3["A"], curlyYs["A"]["r"][2])
     assert np.isclose(curlyYs_Tm3["C"], curlyYs["C"]["r"][2])
     assert np.all(np.isclose(curlyDs_Tm3, curlyDs["r"][2]))
+
+
+def test_curlyYs_and_curlyDs_sums(sim_model):
+    # Load the model variables
+    ss, back_step_fun, inputs, outputs, back_iter_vars, back_iter_outputs, policy, ss_policy_repr, outputs_ss_vals = sim_model
+
+    # Test settings
+    h = 1e-4
+    shocked_inputs = {'r': 1.}  # Here, ex-post r
+
+    curlyDs_sum, curlyYs_sum, T_endo = ads.asymp_disc_sums_curlyDs_and_Ys(ss, back_step_fun, inputs, outputs,
+                                                                          back_iter_vars, back_iter_outputs,
+                                                                          policy, shocked_inputs, h=h,
+                                                                          ss_policy_repr=ss_policy_repr,
+                                                                          outputs_ss_vals=outputs_ss_vals)
+
+    curlyYs, curlyDs = fn.get_curlyYs_curlyDs(ss, T_endo, shocked_inputs, h=h)
+
+    curlyYs_sum_manual, curlyDs_sum_manual = {}, np.empty_like(curlyDs["r"])
+    for t in range(T_endo):
+        curlyDs_sum_manual += ss["beta"] ** -t * curlyDs["r"][t, ...]
+        for o in outputs:
+            if t == 0:
+                curlyYs_sum_manual[o] = ss["beta"] ** -t * curlyYs[o]["r"][t]
+            else:
+                curlyYs_sum_manual[o] += ss["beta"] ** -t * curlyYs[o]["r"][t]
+
+    assert np.all(np.isclose(curlyDs_sum, curlyDs_sum_manual))
+    for o in outputs:
+        assert np.isclose(curlyYs_sum[o], curlyYs_sum_manual[o])
+
+
+def test_curlyEs_sums(sim_model):
+    # Load the model variables
+    ss, _, _, outputs, _, _, policy, ss_policy_repr, _ = sim_model
+
+    # Test ergodicity of curlyEs
+    T = 1000
+    curlyEs = fn.get_curlyEs(ss, T)
+    curlyEs_A_at_T = curlyEs["A"][-1, ...]
+    assert np.all(np.isclose(curlyEs_A_at_T, np.vdot(ss["D"], ss["a"])))
+
+    curlyEs_sum, T_endo = ads.asymp_disc_sum_curlyE(ss, outputs, policy, demean=True, ss_policy_repr=ss_policy_repr)
+
+    curlyEs = fn.get_curlyEs(ss, T_endo)
+    curlyEs_sum_manual = {}
+    for t in range(T_endo):
+        for o in outputs:
+            if t == 0:
+                curlyEs_sum_manual[o] = ss["beta"] ** t * (curlyEs[o][t] - np.vdot(ss["D"], ss[o.lower()]))
+            else:
+                curlyEs_sum_manual[o] += ss["beta"] ** t * (curlyEs[o][t] - np.vdot(ss["D"], ss[o.lower()]))
+
+    for o in outputs:
+        assert np.all(np.isclose(curlyEs_sum[o], curlyEs_sum_manual[o]))
+
+
