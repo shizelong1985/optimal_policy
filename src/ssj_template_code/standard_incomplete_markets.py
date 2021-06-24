@@ -125,7 +125,7 @@ def policy_ss(Pi, a_grid, y, r, beta, eis, tol=1E-9):
 
 def get_lottery(a, a_grid):
     # step 1: find the i such that a' lies between gridpoints a_i and a_(i+1)
-    a_i = np.searchsorted(a_grid, a) - 1
+    a_i = np.maximum(np.searchsorted(a_grid, a) - 1, 0)
     
     # step 2: implement (8) to obtain lottery probabilities pi
     a_pi = (a_grid[a_i+1] - a)/(a_grid[a_i+1] - a_grid[a_i])
