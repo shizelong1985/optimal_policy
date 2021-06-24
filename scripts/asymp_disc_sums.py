@@ -24,10 +24,3 @@ back_iter_outputs = ['Va', 'a', 'c']
 policy = ['a']
 ss_policy_repr = ads.get_sparse_ss_policy_repr(ss, policy)
 outputs_ss_vals = sim.backward_iteration(**{i: ss[i] for i in inputs})
-
-
-# Test full asymp disc sum
-curlyDs_sum, curlyYs_sum, curlyEs_sum, Ts = ads.asymp_disc_sums(ss, sim.backward_iteration, inputs, outputs,
-                                                                back_iter_vars, back_iter_outputs, policy,
-                                                                shocked_inputs, h=h, ss_policy_repr=ss_policy_repr,
-                                                                outputs_ss_vals=outputs_ss_vals, verbose=True)

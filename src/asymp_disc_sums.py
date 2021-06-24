@@ -8,7 +8,7 @@ import src.ssj_template_code.fake_news as fn
 
 def asymp_disc_sums(ss, back_step_fun, inputs, outputs, back_iter_vars, back_iter_outputs, policy, shocked_inputs,
                     h=1e-4, demean_curlyEs=True, recompute_policy_grid=True, ss_policy_repr=None, outputs_ss_vals=None,
-                    verbose=False, maxit=1000, tol=1e-8):
+                    return_Ts=False, verbose=False, maxit=1000, tol=1e-8):
     curlyDs_sum, curlyYs_sum, T_for_Ds_and_Ys = asymp_disc_sums_curlyDs_and_Ys(ss, back_step_fun, inputs, outputs,
                                                                                back_iter_vars, back_iter_outputs,
                                                                                policy, shocked_inputs, h=h,
@@ -19,7 +19,14 @@ def asymp_disc_sums(ss, back_step_fun, inputs, outputs, back_iter_vars, back_ite
     curlyEs_sum, T_for_Es = asymp_disc_sum_curlyE(ss, outputs, policy, demean=demean_curlyEs,
                                                   ss_policy_repr=ss_policy_repr, verbose=verbose,
                                                   maxit=maxit, tol=tol)
-    return curlyDs_sum, curlyYs_sum, curlyEs_sum, (T_for_Ds_and_Ys, T_for_Es)
+    asymp_disc_sums = {}
+    for o in outputs:
+        asymp_disc_sums[o] = curlyYs_sum[o] + ss["beta"] * np.vdot(curlyEs_sum[o], curlyDs_sum)
+
+    if return_Ts:
+        return asymp_disc_sums, (T_for_Ds_and_Ys, T_for_Es)
+    else:
+        return asymp_disc_sums
 
 
 def asymp_disc_sums_curlyDs_and_Ys(ss, back_step_fun, inputs, outputs, back_iter_vars, back_iter_outputs, policy, shocked_inputs,
