@@ -3,12 +3,28 @@
 import numpy as np
 
 from sequence_jacobian.utilities import differentiate, interpolate, forward_step
+import src.ssj_template_code.fake_news as fn
 
 
 def asymp_disc_sums(ss, back_step_fun, inputs, outputs, back_iter_vars, back_iter_outputs, policy, shocked_inputs,
-                    h=1e-4, recompute_policy_grid=True, ss_policy_repr=None, outputs_ss_vals=None,
+                    h=1e-4, demean_curlyEs=True, recompute_policy_grid=True, ss_policy_repr=None, outputs_ss_vals=None,
                     verbose=False, maxit=1000, tol=1e-8):
+    curlyDs_sum, curlyYs_sum, T_for_Ds_and_Ys = asymp_disc_sums_curlyDs_and_Ys(ss, back_step_fun, inputs, outputs,
+                                                                               back_iter_vars, back_iter_outputs,
+                                                                               policy, shocked_inputs, h=h,
+                                                                               recompute_policy_grid=recompute_policy_grid,
+                                                                               ss_policy_repr=ss_policy_repr,
+                                                                               outputs_ss_vals=outputs_ss_vals,
+                                                                               verbose=verbose, maxit=maxit, tol=tol)
+    curlyEs_sum, T_for_Es = asymp_disc_sum_curlyE(ss, outputs, policy, demean=demean_curlyEs,
+                                                  ss_policy_repr=ss_policy_repr, verbose=verbose,
+                                                  maxit=maxit, tol=tol)
+    return curlyDs_sum, curlyYs_sum, curlyEs_sum, (T_for_Ds_and_Ys, T_for_Es)
 
+
+def asymp_disc_sums_curlyDs_and_Ys(ss, back_step_fun, inputs, outputs, back_iter_vars, back_iter_outputs, policy, shocked_inputs,
+                                   h=1e-4, recompute_policy_grid=True, ss_policy_repr=None, outputs_ss_vals=None,
+                                   verbose=False, maxit=1000, tol=1e-8):
     for i in range(maxit):
         if i == 0:
             curlyVs, curlyDs, curlyYs = backward_step_fakenews(ss, back_step_fun, inputs, outputs,
@@ -43,6 +59,35 @@ def asymp_disc_sums(ss, back_step_fun, inputs, outputs, back_iter_vars, back_ite
             print(f"Iteration {i} max abs change in curlyD sum is {curlyD_max_abs_diff} and in curlyY sum is {curlyY_max_abs_diff}")
         if i % 10 == 1 and curlyD_max_abs_diff < tol and curlyY_max_abs_diff < tol:
             return curlyDs_sum, curlyYs_sum, i
+        if i == maxit - 1:
+            raise ValueError(f'No convergence of asymptotic discounted sums after {maxit} iterations!')
+
+
+def asymp_disc_sum_curlyE(ss, outputs, policy, demean=True, ss_policy_repr=None, verbose=False, maxit=1000, tol=1e-8):
+    if ss_policy_repr is None:
+        ss_policy_repr = get_sparse_ss_policy_repr(ss, policy)
+    if demean:
+        output_means = {o: np.vdot(ss["D"], ss[o.lower()]) for o in outputs}
+
+    pol = next(iter(policy))  # TODO: Generalize beyond 1d case. For the 1d case, `policy` should be a singleton list.
+    for i in range(maxit):
+        if i == 0:
+            curlyEs = {o: ss[o.lower()] for o in outputs}
+            curlyEs_sum = {o: curlyEs[o] - output_means[o] for o in outputs} if demean else curlyEs
+        else:
+            for o in outputs:
+                curlyEs[o] = fn.expectations_iteration(curlyEs[o], ss["Pi"], ss_policy_repr[pol]["pol_i"],
+                                                       ss_policy_repr[pol]["pol_pi"])
+                curlyEs_sum[o] += ss["beta"] ** i * (curlyEs[o] - output_means[o]) if demean else ss["beta"] ** i * curlyEs[o]
+
+        curlyE_abs_diff = {}
+        for o in outputs:
+            curlyE_abs_diff[o] = np.abs(ss["beta"] ** i * (curlyEs[o] - output_means[o]) if demean else ss["beta"] ** i * curlyEs[o])
+        curlyE_max_abs_diff = max([np.max(curlyE_abs_diff[o]) for o in outputs])
+        if i % 10 == 1 and verbose:
+            print(f"Iteration {i} max abs change in curlyE sum is {curlyE_max_abs_diff}")
+        if i % 10 == 1 and curlyE_max_abs_diff < tol:
+            return curlyEs_sum, i
         if i == maxit - 1:
             raise ValueError(f'No convergence of asymptotic discounted sums after {maxit} iterations!')
 
