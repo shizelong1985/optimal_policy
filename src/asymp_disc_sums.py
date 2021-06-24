@@ -37,7 +37,7 @@ def asymp_disc_sums(ss, back_step_fun, inputs, outputs, back_iter_vars, back_ite
         for o in outputs:
             curlyY_abs_diff[o] = np.abs(ss["beta"] ** -i * curlyYs[o])
         curlyD_max_abs_diff = np.max(curlyD_abs_diff)
-        curlyY_max_abs_diff = np.max(np.array([np.max(curlyY_abs_diff[o]) for o in outputs]))
+        curlyY_max_abs_diff = max(curlyY_abs_diff.values())
 
         if i % 10 == 1 and verbose:
             print(f"Iteration {i} max abs change in curlyD sum is {curlyD_max_abs_diff} and in curlyY sum is {curlyY_max_abs_diff}")

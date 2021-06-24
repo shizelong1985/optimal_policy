@@ -12,12 +12,8 @@ import src.asymp_disc_sums as ads
 # Standard way of getting curlyYs, curlyDs, and curlyEs given T
 ss = sim.steady_state(**sim.example_calibration())
 
-T = 300
 h = 1e-4
 shocked_inputs = {'r': 1.}  # Here, ex-post r
-
-# curlyYs, curlyDs = fn.get_curlyYs_curlyDs(ss, T, shocked_inputs, h=h)
-# curlyEs = fn.get_curlyEs(ss, T)
 
 # New way of getting cumulative sums of curlyYs, curlyDs, and curlyEs, solving for tolerances as opposed to
 # specifying a given T ex-ante
@@ -35,3 +31,18 @@ curlyDs_sum, curlyYs_sum, T_endo = ads.asymp_disc_sums(ss, sim.backward_iteratio
                                                        policy, shocked_inputs, h=h,
                                                        ss_policy_repr=ss_policy_repr, outputs_ss_vals=outputs_ss_vals,
                                                        verbose=True)
+
+curlyYs, curlyDs = fn.get_curlyYs_curlyDs(ss, T_endo, shocked_inputs, h=h)
+
+curlyYs_sum_manual, curlyDs_sum_manual = {}, np.empty_like(curlyDs["r"])
+for t in range(T_endo):
+    curlyDs_sum_manual += ss["beta"] ** -t * curlyDs["r"][t, ...]
+    for o in outputs:
+        if t == 0:
+            curlyYs_sum_manual[o] = ss["beta"] ** -t * curlyYs[o]["r"][t]
+        else:
+            curlyYs_sum_manual[o] += ss["beta"] ** -t * curlyYs[o]["r"][t]
+
+assert np.all(np.isclose(curlyDs_sum, curlyDs_sum_manual))
+for o in outputs:
+    assert np.isclose(curlyYs_sum[o], curlyYs_sum_manual[o])
