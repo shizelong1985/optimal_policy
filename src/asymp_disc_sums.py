@@ -1,5 +1,6 @@
 """Computing asymptotic, discounted sums of output responses for use in steady state of the optimum calculations"""
 
+import copy
 import numpy as np
 
 from sequence_jacobian.utilities import differentiate, interpolate, forward_step
@@ -40,7 +41,7 @@ def asymp_disc_sums_curlyDs_and_Ys(ss, back_step_fun, inputs, outputs, back_iter
                                                                recompute_policy_grid=recompute_policy_grid,
                                                                ss_policy_repr=ss_policy_repr,
                                                                outputs_ss_vals=outputs_ss_vals)
-            curlyDs_sum, curlyYs_sum = curlyDs, curlyYs
+            curlyDs_sum, curlyYs_sum = copy.deepcopy(curlyDs), copy.deepcopy(curlyYs)
         else:
             for shock_name in shocked_inputs.keys():
                 ss_new = ss.copy()
@@ -60,9 +61,6 @@ def asymp_disc_sums_curlyDs_and_Ys(ss, back_step_fun, inputs, outputs, back_iter
                     curlyYs[o][shock_name] = curlyYs_aux[o][shock_name]
                     curlyYs_sum[o][shock_name] += ss["beta"] ** -i * curlyYs[o][shock_name]
 
-        # TODO: Consolidate this post-debugging
-        # curlyD_max_abs_diff = max([np.max(np.abs(ss["beta"] ** -i * curlyDs[s])) for s in shocked_inputs.keys()])
-        # curlyY_max_abs_diff = max([max([np.max(np.abs(ss["beta"] ** -i * curlyYs[o][s])) for o in outputs]) for s in shocked_inputs.keys()])
         curlyD_max_abs_diff = np.max(np.abs(ss["beta"] ** -i * curlyDs["r"]))
         curlyY_max_abs_diff = max([np.max(np.abs(ss["beta"] ** -i * curlyYs[o]["r"])) for o in outputs])
 
