@@ -169,6 +169,21 @@ def backward_step_fakenews(ss, back_step_fun, inputs, outputs, back_iter_vars, b
     return curlyVs, curlyDs, curlyYs
 
 
+def asymp_disc_sums_from_Js(ss, jac_fun, outputs, shocked_inputs, bigT=1000, bigS=800):
+    """An alternate way to get the asymptotic, discounted sums by pulling directly from a distant column of the
+    Jacobians"""
+    Js = jac_fun(ss, bigT, shocked_inputs)
+
+    beta_vec = np.empty(bigT)
+    beta_vec[:bigS] = ss["beta"] ** np.flip(-np.arange(bigS) - 1)
+    beta_vec[bigS:] = ss["beta"] ** np.arange(bigT - bigS)
+
+    asymp_disc_sums = {}
+    for o in outputs:
+        asymp_disc_sums[o] = {s: np.vdot(beta_vec, Js[o][s][:, bigS]) for s in shocked_inputs.keys()}
+    return asymp_disc_sums
+
+
 def get_sparse_ss_policy_repr(ss, policy):
     policies = {k: ss[k] for k in policy}
     grids = {k: ss[k + '_grid'] for k in policy}

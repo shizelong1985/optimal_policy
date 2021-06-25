@@ -35,6 +35,7 @@ def test_backward_step_fakenews(sim_model):
     curlyVs_Tm2, curlyDs_Tm2, curlyYs_Tm2 = ads.backward_step_fakenews(ss_Tm2, back_step_fun, inputs, outputs,
                                                                        back_iter_vars, back_iter_outputs,
                                                                        policy, exogenous, shocked_inputs, h=h,
+                                                                       ss_policy_repr=ss_policy_repr,
                                                                        outputs_ss_vals=outputs_ss_vals)
 
     # The T - 3 shocked inputs
@@ -43,6 +44,7 @@ def test_backward_step_fakenews(sim_model):
     curlyVs_Tm3, curlyDs_Tm3, curlyYs_Tm3 = ads.backward_step_fakenews(ss_Tm3, back_step_fun, inputs, outputs,
                                                                        back_iter_vars, back_iter_outputs,
                                                                        policy, exogenous, shocked_inputs, h=h,
+                                                                       ss_policy_repr=ss_policy_repr,
                                                                        outputs_ss_vals=outputs_ss_vals)
 
     assert np.isclose(curlyYs_Tm1["A"]["r"], curlyYs["A"]["r"][0])
@@ -128,17 +130,8 @@ def test_asymp_disc_sums(sim_model):
                                           shocked_inputs, h=h, ss_policy_repr=ss_policy_repr,
                                           outputs_ss_vals=outputs_ss_vals)
 
-    bigT = 1000
-    Js = fn.jacobians(ss, bigT, shocked_inputs)
-
-    bigS = 800
-    beta_vec = np.empty(bigT)
-    beta_vec[:bigS] = ss["beta"] ** np.flip(-np.arange(bigS) - 1)
-    beta_vec[bigS:] = ss["beta"] ** np.arange(bigT - bigS)
-
-    asymp_disc_sums_from_Js = {}
-    for o in outputs:
-        asymp_disc_sums_from_Js[o] = {s: np.vdot(beta_vec, Js[o][s][:, bigS]) for s in shocked_inputs.keys()}
+    asymp_disc_sums_from_Js = ads.asymp_disc_sums_from_Js(ss, fn.jacobians, outputs, shocked_inputs,
+                                                          bigT=1000, bigS=800)
 
     for o in outputs:
         for s in shocked_inputs.keys():
