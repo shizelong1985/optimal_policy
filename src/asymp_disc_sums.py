@@ -36,6 +36,8 @@ def asymp_disc_sums(ss, back_step_fun, inputs, outputs, back_iter_vars, back_ite
 def asymp_disc_sums_curlyDs_and_Ys(ss, back_step_fun, inputs, outputs, back_iter_vars, back_iter_outputs, policy,
                                    exogenous, shocked_inputs, h=1e-4, recompute_policy_grid=True, ss_policy_repr=None,
                                    outputs_ss_vals=None, verbose=False, checkit=10, maxit=1000, tol=1e-8):
+    if ss_policy_repr is None:
+        ss_policy_repr = get_sparse_ss_policy_repr(ss, policy)
     for i in range(maxit):
         if i == 0:
             curlyVs, curlyDs, curlyYs = backward_step_fakenews(ss, back_step_fun, inputs, outputs,
@@ -113,8 +115,6 @@ def asymp_disc_sum_curlyE(ss, outputs, policy, demean=True, ss_policy_repr=None,
 def backward_step_fakenews(ss, back_step_fun, inputs, outputs, back_iter_vars, back_iter_outputs, policy,
                            exogenous, shocked_inputs, h=1e-4, recompute_policy_grid=True,
                            ss_policy_repr=None, outputs_ss_vals=None):
-    if ss_policy_repr is None:
-        ss_policy_repr = get_sparse_ss_policy_repr(ss, policy)
     if outputs_ss_vals is None:
         outputs_ss_vals = tuple(ss[i] for i in back_iter_outputs)
 
