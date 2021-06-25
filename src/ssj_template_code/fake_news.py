@@ -15,7 +15,8 @@ def terminal_shock_results(ss, T, i, shock=1, h=1E-4):
     ss_val = np.array(ss[i])[np.newaxis, ...]
         
     # make path with ss repeated on leading dimension for T periods
-    shocked_path = np.repeat(ss_val, T, axis=0)
+    # Important note: Explicitly typecast to float or else, if ss_val is an int, h * shock below will silently be set =0
+    shocked_path = np.repeat(float(ss_val), T, axis=0)
         
     # now add h times shock to input at T-1
     shocked_path[T-1] += h * shock

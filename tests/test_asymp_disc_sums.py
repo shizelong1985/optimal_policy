@@ -117,16 +117,13 @@ def test_asymp_disc_sums(sim_model):
 
     # Test settings
     h = 1e-4
-    shocked_inputs = {'r': 1.}  # Here, ex-post r
+    shocked_inputs = {'r': 1., 'tau': 1.}  # Here, ex-post r
 
-    # Roughly 365 ms
     asymp_disc_sums = ads.asymp_disc_sums(ss, sim.backward_iteration, inputs, outputs,
                                           back_iter_vars, back_iter_outputs, policy,
                                           shocked_inputs, h=h, ss_policy_repr=ss_policy_repr,
                                           outputs_ss_vals=outputs_ss_vals)
 
-    # Comparison
-    # Roughly 3.84 s
     bigT = 1000
     Js = fn.jacobians(ss, bigT, shocked_inputs)
 
@@ -135,10 +132,13 @@ def test_asymp_disc_sums(sim_model):
     beta_vec[:bigS] = ss["beta"] ** np.flip(-np.arange(bigS) - 1)
     beta_vec[bigS:] = ss["beta"] ** np.arange(bigT - bigS)
 
-    asymp_disc_sums_from_Js = {o: np.vdot(beta_vec, Js[o]["r"][:, bigS]) for o in outputs}
+    asymp_disc_sums_from_Js = {}
+    for o in outputs:
+        asymp_disc_sums_from_Js[o] = {s: np.vdot(beta_vec, Js[o][s][:, bigS]) for s in shocked_inputs.keys()}
 
     for o in outputs:
-        # TODO: Try to see if we can more systematically test tolerances choosing bigT, bigS, and tol in asymp_disc_sums
-        # print(f"Difference for {o} is {np.abs(asymp_disc_sums[o] - asymp_disc_sums_from_Js[o])}")
-        assert np.abs(asymp_disc_sums[o]["r"] - asymp_disc_sums_from_Js[o]) < 1e-4
+        for s in shocked_inputs.keys():
+            # TODO: Try to see if we can more systematically test tolerances choosing bigT, bigS, and tol in asymp_disc_sums
+            # print(f"Difference for output {o} and shock {s} is {np.abs(asymp_disc_sums[o][s] - asymp_disc_sums_from_Js[o][s])}")
+            assert np.abs(asymp_disc_sums[o][s] - asymp_disc_sums_from_Js[o][s]) < 1e-4
 

@@ -10,7 +10,7 @@ import src.asymp_disc_sums as ads
 def sim_model():
     ss = sim.steady_state(**sim.example_calibration())
 
-    inputs = ['Va', 'Pi', 'a_grid', 'y', 'r', 'beta', 'eis']
+    inputs = ['Va', 'Pi', 'a_grid', 'y', 'r', 'beta', 'eis', 'tau']
     outputs = ['A', 'C']
     back_step_fun = sim.backward_iteration
     back_iter_vars = ['Va']

@@ -10,9 +10,8 @@ import numba
 
 def example_calibration():
     y, _, Pi = discretize_income(0.975, 0.7, 7) 
-    return dict(a_grid = discretize_assets(0, 10_000, 500),
-                y=y, Pi=Pi,
-                r = 0.01/4, beta=1-0.08/4, eis=1)
+    return dict(a_grid=discretize_assets(0, 10_000, 500),
+                y=y, Pi=Pi, r=0.01/4, beta=1-0.08/4, eis=1., tau=0.)
 
 
 """Part 1: discretization tools"""
@@ -82,13 +81,13 @@ def discretize_income(rho, sigma, n_s):
 
 """Part 2: Backward iteration for policy"""
 
-def backward_iteration(Va, Pi, a_grid, y, r, beta, eis):
+def backward_iteration(Va, Pi, a_grid, y, r, beta, eis, tau):
     # step 1: discounting and expectations
     Wa = beta * Pi @ Va
     
     # step 2: solving for asset policy using the first-order condition
     c_endog = Wa**(-eis)
-    coh = y[:, np.newaxis] + (1+r)*a_grid
+    coh = (1 - tau) * y[:, np.newaxis] + (1 + r) * a_grid
     
     a = np.empty_like(coh)
     for s in range(len(y)):
@@ -104,15 +103,15 @@ def backward_iteration(Va, Pi, a_grid, y, r, beta, eis):
     return Va, a, c
 
 
-def policy_ss(Pi, a_grid, y, r, beta, eis, tol=1E-9):
+def policy_ss(Pi, a_grid, y, r, beta, eis, tau, tol=1E-9):
     # initial guess for Va: assume consumption 5% of cash-on-hand, then get Va from envelope condition
-    coh = y[:, np.newaxis] + (1+r)*a_grid
+    coh = (1 - tau) * y[:, np.newaxis] + (1+r)*a_grid
     c = 0.05 * coh
-    Va = (1+r) * c**(-1/eis)
+    Va = (1 + r) * c**(-1/eis)
     
     # iterate until maximum distance between two iterations falls below tol, fail-safe max of 10,000 iterations
     for it in range(10_000):
-        Va, a, c = backward_iteration(Va, Pi, a_grid, y, r, beta, eis)
+        Va, a, c = backward_iteration(Va, Pi, a_grid, y, r, beta, eis, tau)
         
         # after iteration 0, can compare new policy function to old one
         if it > 0 and np.max(np.abs(a - a_old)) < tol:
@@ -169,14 +168,14 @@ def distribution_ss(Pi, a, a_grid, tol=1E-10):
 
 """Part 4: solving for steady state, including aggregates"""
 
-def steady_state(Pi, a_grid, y, r, beta, eis):
-    Va, a, c = policy_ss(Pi, a_grid, y, r, beta, eis)
+def steady_state(Pi, a_grid, y, r, beta, eis, tau):
+    Va, a, c = policy_ss(Pi, a_grid, y, r, beta, eis, tau)
     D = distribution_ss(Pi, a, a_grid)
     
     return dict(D=D, Va=Va, 
                 a=a, c=c,
                 A=np.vdot(a, D), C=np.vdot(c, D),
-                Pi=Pi, a_grid=a_grid, y=y, r=r, beta=beta, eis=eis)
+                Pi=Pi, a_grid=a_grid, y=y, r=r, beta=beta, eis=eis, tau=tau)
 
 
 """Part 5: dynamics: perfect-foresight impulse responses"""
@@ -185,7 +184,7 @@ def policy_impulse_response(ss, T, **shocks):
     assert all(x.shape[0] == T for x in shocks.values())
     
     # make list of all "current" inputs to the backward iteration function
-    current_inputs = ['a_grid', 'y', 'r', 'beta', 'eis']
+    current_inputs = ['a_grid', 'y', 'r', 'beta', 'eis', 'tau']
     
     # make dict of all steady-state inputs that adds forward-looking Va and Pi
     # will use these for non-shocked inputs, and also Va and Pi in final period
@@ -196,7 +195,7 @@ def policy_impulse_response(ss, T, **shocks):
     
     # create a T*nS*nA dimensional array to store each outputs of backward iteration,
     # (Va, a, c), where nS*nA is the shape of each in steady state
-    Va, a, c  = (np.empty((T,) + ss['Va'].shape) for _ in range(3))
+    Va, a, c = (np.empty((T,) + ss['Va'].shape) for _ in range(3))
     
     for t in reversed(range(T)):
         # always use this period's value of any shocked current inputs
