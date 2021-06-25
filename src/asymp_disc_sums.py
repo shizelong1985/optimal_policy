@@ -5,14 +5,15 @@ import numpy as np
 
 from sequence_jacobian.utilities import differentiate, interpolate, forward_step
 import src.ssj_template_code.fake_news as fn
+from src.utils import make_inputs
 
 
-def asymp_disc_sums(ss, back_step_fun, inputs, outputs, back_iter_vars, back_iter_outputs, policy, shocked_inputs,
-                    h=1e-4, demean_curlyEs=True, recompute_policy_grid=True, ss_policy_repr=None, outputs_ss_vals=None,
-                    return_Ts=False, verbose=False, maxit=1000, tol=1e-8):
+def asymp_disc_sums(ss, back_step_fun, inputs, outputs, back_iter_vars, back_iter_outputs, policy, exogenous,
+                    shocked_inputs, h=1e-4, demean_curlyEs=True, recompute_policy_grid=True, ss_policy_repr=None,
+                    outputs_ss_vals=None, return_Ts=False, verbose=False, maxit=1000, tol=1e-8):
     curlyDs_sum, curlyYs_sum, T_for_Ds_and_Ys = asymp_disc_sums_curlyDs_and_Ys(ss, back_step_fun, inputs, outputs,
                                                                                back_iter_vars, back_iter_outputs,
-                                                                               policy, shocked_inputs, h=h,
+                                                                               policy, exogenous, shocked_inputs, h=h,
                                                                                recompute_policy_grid=recompute_policy_grid,
                                                                                ss_policy_repr=ss_policy_repr,
                                                                                outputs_ss_vals=outputs_ss_vals,
@@ -33,13 +34,13 @@ def asymp_disc_sums(ss, back_step_fun, inputs, outputs, back_iter_vars, back_ite
 
 
 def asymp_disc_sums_curlyDs_and_Ys(ss, back_step_fun, inputs, outputs, back_iter_vars, back_iter_outputs, policy,
-                                   shocked_inputs, h=1e-4, recompute_policy_grid=True, ss_policy_repr=None,
+                                   exogenous, shocked_inputs, h=1e-4, recompute_policy_grid=True, ss_policy_repr=None,
                                    outputs_ss_vals=None, verbose=False, maxit=1000, tol=1e-8):
     for i in range(maxit):
         if i == 0:
             curlyVs, curlyDs, curlyYs = backward_step_fakenews(ss, back_step_fun, inputs, outputs,
                                                                back_iter_vars, back_iter_outputs,
-                                                               policy, shocked_inputs, h=h,
+                                                               policy, exogenous, shocked_inputs, h=h,
                                                                recompute_policy_grid=recompute_policy_grid,
                                                                ss_policy_repr=ss_policy_repr,
                                                                outputs_ss_vals=outputs_ss_vals)
@@ -51,7 +52,7 @@ def asymp_disc_sums_curlyDs_and_Ys(ss, back_step_fun, inputs, outputs, back_iter
                     ss_new[back_iter_var] = ss[back_iter_var] + curlyVs[back_iter_var][shock_name] * h
                 curlyVs_aux, curlyDs_aux, curlyYs_aux = backward_step_fakenews(ss_new, back_step_fun, inputs, outputs,
                                                                                back_iter_vars, back_iter_outputs,
-                                                                               policy, {shock_name: 0.}, h=h,
+                                                                               policy, exogenous, {shock_name: 0.}, h=h,
                                                                                recompute_policy_grid=recompute_policy_grid,
                                                                                outputs_ss_vals=outputs_ss_vals)
                 for back_iter_var in back_iter_vars:
@@ -107,8 +108,9 @@ def asymp_disc_sum_curlyE(ss, outputs, policy, demean=True, ss_policy_repr=None,
 # compared to the structure of the old get_curlyYs_curlyDs function.
 # Hence, when calculating curlyYs and curlyDs w/ resp. to h, it needs to be the same `h` from which the initial `h`-scaled shock
 # was calculated.
-def backward_step_fakenews(ss, back_step_fun, inputs, outputs, back_iter_vars, back_iter_outputs, policy, shocked_inputs,
-                           h=1e-4, recompute_policy_grid=True, ss_policy_repr=None, outputs_ss_vals=None):
+def backward_step_fakenews(ss, back_step_fun, inputs, outputs, back_iter_vars, back_iter_outputs, policy,
+                           exogenous, shocked_inputs, h=1e-4, recompute_policy_grid=True,
+                           ss_policy_repr=None, outputs_ss_vals=None):
     if ss_policy_repr is None:
         ss_policy_repr = get_sparse_ss_policy_repr(ss, policy)
 
@@ -124,8 +126,8 @@ def backward_step_fakenews(ss, back_step_fun, inputs, outputs, back_iter_vars, b
 
     # 1) Shock perturbs outputs
     for shock_name, shock_value in shocked_inputs.items():
-        out = differentiate.numerical_diff(back_step_fun, {j: ss[j] for j in inputs}, {shock_name: shock_value},
-                                           h, outputs_ss_vals)
+        inputs_dict = make_inputs(inputs, ss, back_iter_vars, exogenous)
+        out = differentiate.numerical_diff(back_step_fun, inputs_dict, {shock_name: shock_value}, h, outputs_ss_vals)
         for ib, b in enumerate(back_iter_outputs):
             shocked_outputs[b][shock_name] = out[ib]
             if b in back_iter_vars:

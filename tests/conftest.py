@@ -4,6 +4,7 @@ import pytest
 
 import src.ssj_template_code.standard_incomplete_markets as sim
 import src.asymp_disc_sums as ads
+from src.utils import make_inputs
 
 
 @pytest.fixture(scope='session')
@@ -16,8 +17,11 @@ def sim_model():
     back_iter_vars = ['Va']
     back_iter_outputs = ['Va', 'a', 'c']
     policy = ['a']
+    exogenous = ['Pi']
     ss_policy_repr = ads.get_sparse_ss_policy_repr(ss, policy)
-    outputs_ss_vals = sim.backward_iteration(**{i: ss[i] for i in inputs})
 
-    return ss, back_step_fun, inputs, outputs, back_iter_vars, back_iter_outputs, policy, ss_policy_repr, outputs_ss_vals
+    inputs_dict = make_inputs(inputs, ss, back_iter_vars, exogenous)
+    outputs_ss_vals = sim.backward_iteration(**inputs_dict)
+
+    return ss, back_step_fun, inputs, outputs, back_iter_vars, back_iter_outputs, policy, exogenous, ss_policy_repr, outputs_ss_vals
 

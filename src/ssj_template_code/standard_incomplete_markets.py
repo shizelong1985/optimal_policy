@@ -5,6 +5,8 @@ Simple code for standard incomplete markets model.
 import numpy as np
 import numba
 
+from src.utils import make_inputs
+
 
 """Part 0: example calibration from notebook"""
 
@@ -81,9 +83,9 @@ def discretize_income(rho, sigma, n_s):
 
 """Part 2: Backward iteration for policy"""
 
-def backward_iteration(Va, Pi, a_grid, y, r, beta, eis, tau):
+def backward_iteration(Va_p, Pi_p, a_grid, y, r, beta, eis, tau):
     # step 1: discounting and expectations
-    Wa = beta * Pi @ Va
+    Wa = beta * Pi_p @ Va_p
     
     # step 2: solving for asset policy using the first-order condition
     c_endog = Wa**(-eis)
@@ -207,8 +209,9 @@ def policy_impulse_response(ss, T, **shocks):
             inputs['Va'] = Va[t+1]
             if 'Pi' in shocks:
                 inputs['Pi'] = shocks['Pi'][t+1]
-            
-        Va[t], a[t], c[t] = backward_iteration(**inputs)
+
+        inputs_dict = make_inputs(inputs, ss, ['Va'], ['Pi'])
+        Va[t], a[t], c[t] = backward_iteration(**inputs_dict)
         
     return Va, a, c
 
