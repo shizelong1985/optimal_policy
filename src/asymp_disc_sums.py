@@ -54,6 +54,7 @@ def asymp_disc_sums_curlyDs_and_Ys(ss, back_step_fun, inputs, outputs, back_iter
                                                                                back_iter_vars, back_iter_outputs,
                                                                                policy, exogenous, {shock_name: 0.}, h=h,
                                                                                recompute_policy_grid=recompute_policy_grid,
+                                                                               ss_policy_repr=ss_policy_repr,
                                                                                outputs_ss_vals=outputs_ss_vals)
                 for back_iter_var in back_iter_vars:
                     curlyVs[back_iter_var][shock_name] = curlyVs_aux[back_iter_var][shock_name]
@@ -64,8 +65,8 @@ def asymp_disc_sums_curlyDs_and_Ys(ss, back_step_fun, inputs, outputs, back_iter
                     curlyYs[o][shock_name] = curlyYs_aux[o][shock_name]
                     curlyYs_sum[o][shock_name] += ss["beta"] ** -i * curlyYs[o][shock_name]
 
-        curlyD_max_abs_diff = np.max(np.abs(ss["beta"] ** -i * curlyDs["r"]))
-        curlyY_max_abs_diff = max([np.max(np.abs(ss["beta"] ** -i * curlyYs[o]["r"])) for o in outputs])
+        curlyD_max_abs_diff = max([np.max(np.abs(ss["beta"] ** -i * curlyDs[s])) for s in shocked_inputs])
+        curlyY_max_abs_diff = max([max([np.max(np.abs(ss["beta"] ** -i * curlyYs[o][s])) for o in outputs]) for s in shocked_inputs])
 
         if i % 10 == 1 and verbose:
             print(f"Iteration {i} max abs change in curlyD sum is {curlyD_max_abs_diff} and in curlyY sum is {curlyY_max_abs_diff}")
