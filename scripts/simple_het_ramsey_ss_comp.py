@@ -1,13 +1,13 @@
-"""Replicating/extending the preliminary results in the `simplest possible het agent ramsey steady state` notebook"""
-
 import copy
 import numpy as np
 import matplotlib.pyplot as plt
 
 import sequence_jacobian as sj
 import sequence_jacobian.models.krusell_smith as ks
+from sequence_jacobian.steady_state.classes import SteadyStateDict
 from src.models.simple_het import simple_het_ramsey_resid
-from src.ramsey_steady_state import solve_ramsey_steady_state
+from src.ramsey_steady_state import steady_state
+import src.asymp_disc_sums as ads
 
 # Setting up input arguments for Ramsey steady state solution
 e_grid, pi, Pi = sj.markov_rouwenhorst(0.9, 0.9)
@@ -35,13 +35,6 @@ shocked_inputs = {"r": 1., "w": 1.}
 resid_kwargs = {"tol": 1e-5}  # Could choose the tol and maxit for the asymptotic discounted sums
 optim_kwargs = {"xtol": 1e-8}  # Could choose xtol, rtol, and maxiter
 
-# ss = solve_ramsey_steady_state(calibration, unknowns, ss_fun, resid_fun, post_process_fun, block_inputs,
-#                                shocked_inputs, resid_kwargs=resid_kwargs, optim_kwargs=optim_kwargs)
-
-# Testing
-import src.ssj_template_code.fake_news as fn
-import src.asymp_disc_sums as ads
-from src.ramsey_steady_state import steady_state
 back_step_fun, inputs, outputs, back_iter_vars, back_iter_outputs, policy, exogenous = block_inputs
 ss = copy.deepcopy(calibration)
 # ss.update({"r": -0.05})
@@ -49,18 +42,35 @@ ss.update({"r": 1/calibration["beta"] - 1 - 0.002})
 # ss.update({"r": -0.02321815157081399})
 ss.update(steady_state(ss, ss_fun))
 
-ss_policy_repr = ads.get_sparse_ss_policy_repr(ss, policy)
-outputs_ss_vals = tuple(ss[i] for i in back_iter_outputs)
+# Trying the alternative way to calculate asymptotic discounted sums
+bigT = 1000
+bigS = 200
 
-# curlyDs, curlyYs, T_endo = ads.asymp_disc_sums_curlyDs_and_Ys(ss, back_step_fun, inputs, outputs, back_iter_vars,
-#                                                               back_iter_outputs, policy, exogenous, shocked_inputs,
-#                                                               h=1e-4, recompute_policy_grid=True, ss_policy_repr=ss_policy_repr,
-#                                                               outputs_ss_vals=outputs_ss_vals, verbose=True,
-#                                                               # checkit=1, maxit=100, tol=1e-5)
-#                                                               checkit=10, maxit=1000, tol=1e-5)
+# Only works for a single block as of now
+def construct_ssj_ss_from_flat_ss(ss, block_name, block_internals):
+    toplevel = {i: ss[i] for i in ss if i not in block_internals}
+    internal = {block_name: {i: ss[i] for i in block_internals}}
+    return SteadyStateDict(toplevel, internal=internal)
 
-# w/ r = -0.05 checks out against stats(ss, T=200) from the notebook, roughly accurate to 1e-5
-sums = ads.asymp_disc_sums(ss, back_step_fun, inputs, outputs, back_iter_vars,
-                           back_iter_outputs, policy, exogenous, shocked_inputs, ss_policy_repr=ss_policy_repr,
-                           outputs_ss_vals=outputs_ss_vals, verbose=True, maxit=1000, tol=1e-6)
-curlyE_b_tau, curlyE_logb_r = -sums["A"]["w"], sums["A"]["r"] / ss["A"]
+ss_ssj = construct_ssj_ss_from_flat_ss(ss, "household", ["Va", "D", "a", "c"])
+
+# Janky implementation...
+def jac_fun(ss, bigT, shocked_inputs):
+    return ks.household.jacobian(ss, list(shocked_inputs.keys()), T=bigT).nesteddict
+
+Js = jac_fun(ss_ssj, bigT, shocked_inputs)
+
+# w/ r = -0.05 matches against stats(ss, T=200) from the notebook, roughly accurate to 1e-5
+# w/ r = 1/beta - 1 - 0.002 matches against stats(ss, T=200) from the notebook, accurate to 1e0
+sums_from_Js = ads.asymp_disc_sums_from_Js(ss_ssj, jac_fun, outputs, shocked_inputs, bigT=bigT, bigS=bigS)
+curlyE_b_tau_from_Js, curlyE_logb_r_from_Js = -sums_from_Js["A"]["w"], sums_from_Js["A"]["r"] / ss["A"]
+
+beta_vec = np.empty(bigT)
+beta_vec[:bigS] = ss["beta"] ** np.flip(-np.arange(bigS) - 1)
+beta_vec[bigS:] = ss["beta"] ** np.arange(bigT - bigS)
+
+o = "A"
+s = "r"
+plt.plot(Js[o][s][:, bigS])
+plt.plot(beta_vec * Js[o][s][:, bigS])
+plt.show()
