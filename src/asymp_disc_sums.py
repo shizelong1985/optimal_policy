@@ -22,7 +22,9 @@ def asymp_disc_sums(ss, back_step_fun, inputs, outputs, back_iter_vars, back_ite
                                                   maxit=maxit, tol=tol)
     asymp_disc_sums = {}
     for o in outputs:
-        asymp_disc_sums[o] = curlyYs_sum[o] + ss["beta"] * np.vdot(curlyEs_sum[o], curlyDs_sum)
+        asymp_disc_sums[o] = {}
+        for s in shocked_inputs.keys():
+            asymp_disc_sums[o][s] = curlyYs_sum[o][s] + ss["beta"] * np.vdot(curlyEs_sum[o], curlyDs_sum[s])
 
     if return_Ts:
         return asymp_disc_sums, (T_for_Ds_and_Ys, T_for_Es)

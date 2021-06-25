@@ -68,8 +68,7 @@ def test_curlyYs_and_curlyDs_sums(sim_model):
                                                                           back_iter_vars, back_iter_outputs,
                                                                           policy, shocked_inputs, h=h,
                                                                           ss_policy_repr=ss_policy_repr,
-                                                                          outputs_ss_vals=outputs_ss_vals,
-                                                                          verbose=True)
+                                                                          outputs_ss_vals=outputs_ss_vals)
 
     curlyYs, curlyDs = fn.get_curlyYs_curlyDs(ss, T_endo, shocked_inputs, h=h)
 
@@ -124,7 +123,7 @@ def test_asymp_disc_sums(sim_model):
     asymp_disc_sums = ads.asymp_disc_sums(ss, sim.backward_iteration, inputs, outputs,
                                           back_iter_vars, back_iter_outputs, policy,
                                           shocked_inputs, h=h, ss_policy_repr=ss_policy_repr,
-                                          outputs_ss_vals=outputs_ss_vals, verbose=False)
+                                          outputs_ss_vals=outputs_ss_vals)
 
     # Comparison
     # Roughly 3.84 s
@@ -141,5 +140,5 @@ def test_asymp_disc_sums(sim_model):
     for o in outputs:
         # TODO: Try to see if we can more systematically test tolerances choosing bigT, bigS, and tol in asymp_disc_sums
         # print(f"Difference for {o} is {np.abs(asymp_disc_sums[o] - asymp_disc_sums_from_Js[o])}")
-        assert np.abs(asymp_disc_sums[o] - asymp_disc_sums_from_Js[o]) < 1e-4
+        assert np.abs(asymp_disc_sums[o]["r"] - asymp_disc_sums_from_Js[o]) < 1e-4
 
