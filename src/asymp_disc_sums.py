@@ -35,7 +35,7 @@ def asymp_disc_sums(ss, back_step_fun, inputs, outputs, back_iter_vars, back_ite
 
 def asymp_disc_sums_curlyDs_and_Ys(ss, back_step_fun, inputs, outputs, back_iter_vars, back_iter_outputs, policy,
                                    exogenous, shocked_inputs, h=1e-4, recompute_policy_grid=True, ss_policy_repr=None,
-                                   outputs_ss_vals=None, verbose=False, maxit=1000, tol=1e-8):
+                                   outputs_ss_vals=None, verbose=False, checkit=10, maxit=1000, tol=1e-8):
     for i in range(maxit):
         if i == 0:
             curlyVs, curlyDs, curlyYs = backward_step_fakenews(ss, back_step_fun, inputs, outputs,
@@ -68,15 +68,16 @@ def asymp_disc_sums_curlyDs_and_Ys(ss, back_step_fun, inputs, outputs, back_iter
         curlyD_max_abs_diff = max([np.max(np.abs(ss["beta"] ** -i * curlyDs[s])) for s in shocked_inputs])
         curlyY_max_abs_diff = max([max([np.max(np.abs(ss["beta"] ** -i * curlyYs[o][s])) for o in outputs]) for s in shocked_inputs])
 
-        if i % 10 == 1 and verbose:
+        if i % checkit == 0 and verbose:
             print(f"Iteration {i} max abs change in curlyD sum is {curlyD_max_abs_diff} and in curlyY sum is {curlyY_max_abs_diff}")
-        if i % 10 == 1 and curlyD_max_abs_diff < tol and curlyY_max_abs_diff < tol:
+        if i % checkit == 0 and curlyD_max_abs_diff < tol and curlyY_max_abs_diff < tol:
             return curlyDs_sum, curlyYs_sum, i
         if i == maxit - 1:
             raise ValueError(f'No convergence of asymptotic discounted sums after {maxit} iterations!')
 
 
-def asymp_disc_sum_curlyE(ss, outputs, policy, demean=True, ss_policy_repr=None, verbose=False, maxit=1000, tol=1e-8):
+def asymp_disc_sum_curlyE(ss, outputs, policy, demean=True, ss_policy_repr=None, verbose=False,
+                          checkit=10, maxit=1000, tol=1e-8):
     if ss_policy_repr is None:
         ss_policy_repr = get_sparse_ss_policy_repr(ss, policy)
     if demean:
@@ -97,9 +98,9 @@ def asymp_disc_sum_curlyE(ss, outputs, policy, demean=True, ss_policy_repr=None,
         for o in outputs:
             curlyE_abs_diff[o] = np.abs(ss["beta"] ** i * (curlyEs[o] - output_means[o]) if demean else ss["beta"] ** i * curlyEs[o])
         curlyE_max_abs_diff = max([np.max(curlyE_abs_diff[o]) for o in outputs])
-        if i % 10 == 1 and verbose:
+        if i % checkit == 0 and verbose:
             print(f"Iteration {i} max abs change in curlyE sum is {curlyE_max_abs_diff}")
-        if i % 10 == 1 and curlyE_max_abs_diff < tol:
+        if i % checkit == 0 and curlyE_max_abs_diff < tol:
             return curlyEs_sum, i
         if i == maxit - 1:
             raise ValueError(f'No convergence of asymptotic discounted sums after {maxit} iterations!')
@@ -114,6 +115,8 @@ def backward_step_fakenews(ss, back_step_fun, inputs, outputs, back_iter_vars, b
                            ss_policy_repr=None, outputs_ss_vals=None):
     if ss_policy_repr is None:
         ss_policy_repr = get_sparse_ss_policy_repr(ss, policy)
+    if outputs_ss_vals is None:
+        outputs_ss_vals = tuple(ss[i] for i in back_iter_outputs)
 
     # Initialize variables
     Pi_T = ss["Pi"].T.copy()
