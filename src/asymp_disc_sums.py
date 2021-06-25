@@ -29,9 +29,9 @@ def asymp_disc_sums(ss, back_step_fun, inputs, outputs, back_iter_vars, back_ite
         return asymp_disc_sums
 
 
-def asymp_disc_sums_curlyDs_and_Ys(ss, back_step_fun, inputs, outputs, back_iter_vars, back_iter_outputs, policy, shocked_inputs,
-                                   h=1e-4, recompute_policy_grid=True, ss_policy_repr=None, outputs_ss_vals=None,
-                                   verbose=False, maxit=1000, tol=1e-8):
+def asymp_disc_sums_curlyDs_and_Ys(ss, back_step_fun, inputs, outputs, back_iter_vars, back_iter_outputs, policy,
+                                   shocked_inputs, h=1e-4, recompute_policy_grid=True, ss_policy_repr=None,
+                                   outputs_ss_vals=None, verbose=False, maxit=1000, tol=1e-8):
     for i in range(maxit):
         if i == 0:
             curlyVs, curlyDs, curlyYs = backward_step_fakenews(ss, back_step_fun, inputs, outputs,
@@ -42,25 +42,29 @@ def asymp_disc_sums_curlyDs_and_Ys(ss, back_step_fun, inputs, outputs, back_iter
                                                                outputs_ss_vals=outputs_ss_vals)
             curlyDs_sum, curlyYs_sum = curlyDs, curlyYs
         else:
-            ss_new = ss.copy()
-            ss_new["Va"] = ss["Va"] + curlyVs["Va"] * h
-            curlyVs, curlyDs, curlyYs = backward_step_fakenews(ss_new, back_step_fun, inputs, outputs,
-                                                               back_iter_vars, back_iter_outputs,
-                                                               policy, {}, h=h,
-                                                               recompute_policy_grid=recompute_policy_grid,
-                                                               outputs_ss_vals=outputs_ss_vals)
-            # TODO: An optimization later could be not calculating curlyYs or curlyDs if either converges earlier
-            curlyDs_sum += ss["beta"] ** -i * curlyDs
-            for o in outputs:
-                curlyYs_sum[o] += ss["beta"] ** -i * curlyYs[o]
+            for shock_name in shocked_inputs.keys():
+                ss_new = ss.copy()
+                for back_iter_var in back_iter_vars:
+                    ss_new[back_iter_var] = ss[back_iter_var] + curlyVs[back_iter_var][shock_name] * h
+                curlyVs_aux, curlyDs_aux, curlyYs_aux = backward_step_fakenews(ss_new, back_step_fun, inputs, outputs,
+                                                                               back_iter_vars, back_iter_outputs,
+                                                                               policy, {shock_name: 0.}, h=h,
+                                                                               recompute_policy_grid=recompute_policy_grid,
+                                                                               outputs_ss_vals=outputs_ss_vals)
+                for back_iter_var in back_iter_vars:
+                    curlyVs[back_iter_var][shock_name] = curlyVs_aux[back_iter_var][shock_name]
+                curlyDs[shock_name] = curlyDs_aux[shock_name]
+                # TODO: An optimization later could be not calculating curlyYs or curlyDs if either converges earlier
+                curlyDs_sum[shock_name] += ss["beta"] ** -i * curlyDs[shock_name]
+                for o in outputs:
+                    curlyYs[o][shock_name] = curlyYs_aux[o][shock_name]
+                    curlyYs_sum[o][shock_name] += ss["beta"] ** -i * curlyYs[o][shock_name]
 
         # TODO: Consolidate this post-debugging
-        curlyD_abs_diff = np.abs(ss["beta"] ** -i * curlyDs)
-        curlyY_abs_diff = {}
-        for o in outputs:
-            curlyY_abs_diff[o] = np.abs(ss["beta"] ** -i * curlyYs[o])
-        curlyD_max_abs_diff = np.max(curlyD_abs_diff)
-        curlyY_max_abs_diff = max(curlyY_abs_diff.values())
+        # curlyD_max_abs_diff = max([np.max(np.abs(ss["beta"] ** -i * curlyDs[s])) for s in shocked_inputs.keys()])
+        # curlyY_max_abs_diff = max([max([np.max(np.abs(ss["beta"] ** -i * curlyYs[o][s])) for o in outputs]) for s in shocked_inputs.keys()])
+        curlyD_max_abs_diff = np.max(np.abs(ss["beta"] ** -i * curlyDs["r"]))
+        curlyY_max_abs_diff = max([np.max(np.abs(ss["beta"] ** -i * curlyYs[o]["r"])) for o in outputs])
 
         if i % 10 == 1 and verbose:
             print(f"Iteration {i} max abs change in curlyD sum is {curlyD_max_abs_diff} and in curlyY sum is {curlyY_max_abs_diff}")
@@ -108,42 +112,55 @@ def backward_step_fakenews(ss, back_step_fun, inputs, outputs, back_iter_vars, b
     if ss_policy_repr is None:
         ss_policy_repr = get_sparse_ss_policy_repr(ss, policy)
 
-    # shock perturbs outputs
-    shocked_outputs = {k: v for k, v in zip(back_iter_outputs, differentiate.numerical_diff(back_step_fun,
-                                                                                            {j: ss[j] for j in inputs},
-                                                                                            shocked_inputs, h,
-                                                                                            outputs_ss_vals))}
-    curlyV = {k: shocked_outputs[k] for k in back_iter_vars}
+    # Initialize variables
+    Pi_T = ss["Pi"].T.copy()
+    shocked_outputs = {b: {} for b in back_iter_outputs}
+    curlyVs = {b: {} for b in back_iter_vars}
+    curlyYs = {o: {} for o in outputs}
+    curlyDs = {s: {} for s in shocked_inputs.keys()}
 
-    # which affects the distribution tomorrow
     # TODO: Generalize beyond 1d case. For the 1d case, `policy` should be a singleton list.
     pol = next(iter(policy))
 
-    if recompute_policy_grid:
-        # If the shock is large enough, it may cause the left grid point of the policy's sparse representation
-        # to change. Hence, for robustness recompute the left grid points and weights of the shocked policy
-        # to calculate the correct curlyD here.
-        new_policy_repr = get_sparse_policy_repr({pol: ss[pol] + shocked_outputs[pol] * h}, {pol: ss[pol + "_grid"]})
-        pol_i_old, pol_pi_old = ss_policy_repr[pol]["pol_i"], ss_policy_repr[pol]["pol_pi"]
-        pol_i_new, pol_pi_new = new_policy_repr[pol]["pol_i"], new_policy_repr[pol]["pol_pi"]
-        curlyD = (forward_step.forward_step_1d(ss["D"], ss["Pi"].T.copy(), pol_i_new, pol_pi_new) -
-                  forward_step.forward_step_1d(ss["D"], ss["Pi"].T.copy(), pol_i_old, pol_pi_old)) / h
+    # 1) Shock perturbs outputs
+    for shock_name, shock_value in shocked_inputs.items():
+        out = differentiate.numerical_diff(back_step_fun, {j: ss[j] for j in inputs}, {shock_name: shock_value},
+                                           h, outputs_ss_vals)
+        for ib, b in enumerate(back_iter_outputs):
+            shocked_outputs[b][shock_name] = out[ib]
+            if b in back_iter_vars:
+                curlyVs[b][shock_name] = shocked_outputs[b][shock_name]
 
-        # TODO: Figure out why this method of grid updating does not work...
-        # new_policy_repr = get_sparse_policy_repr({pol: ss[pol] + shocked_outputs[pol] * h}, {pol: ss[pol + "_grid"]})
-        # curlyD = forward_step.forward_step_shock_1d(ss["D"], ss["Pi"].T.copy(), new_policy_repr[pol]["pol_i"],
-        #                                             -shocked_outputs[pol] / new_policy_repr[pol]["pol_space"])
-    else:
-        # This method will only work if we are sure that the grid points representing the policy's sparse
-        # representation do not change. Should be feasible with small enough h, but then may run into
-        # numerical differentiation precision issues.
-        curlyD = forward_step.forward_step_shock_1d(ss["D"], ss["Pi"].T.copy(), ss_policy_repr[pol]["pol_i"],
-                                                    -shocked_outputs[pol] / ss_policy_repr[pol]["pol_space"])
+        # 2) which affects the distribution tomorrow
+        if recompute_policy_grid:
+            # If the shock is large enough, it may cause the left grid point of the policy's sparse representation
+            # to change. Hence, for robustness recompute the left grid points and weights of the shocked policy
+            # to calculate the correct curlyD here.
+            new_policy_repr = get_sparse_policy_repr({pol: ss[pol] + shocked_outputs[pol][shock_name] * h},
+                                                     {pol: ss[pol + "_grid"]})
+            pol_i_old, pol_pi_old = ss_policy_repr[pol]["pol_i"], ss_policy_repr[pol]["pol_pi"]
+            pol_i_new, pol_pi_new = new_policy_repr[pol]["pol_i"], new_policy_repr[pol]["pol_pi"]
+            curlyDs[shock_name] = (forward_step.forward_step_1d(ss["D"], Pi_T, pol_i_new, pol_pi_new) -
+                                   forward_step.forward_step_1d(ss["D"], Pi_T, pol_i_old, pol_pi_old)) / h
 
-    # and the aggregate outcomes today
-    curlyY = {k: np.vdot(ss["D"], shocked_outputs[k.lower()]) for k in outputs}
+            # TODO: Figure out why this method of grid updating does not work...
+            # new_policy_repr = get_sparse_policy_repr({pol: ss[pol] + shocked_outputs[pol][shock_name] * h},
+            #                                          {pol: ss[pol + "_grid"]})
+            # curlyDs[shock_name] = forward_step.forward_step_shock_1d(ss["D"], Pi_T, new_policy_repr[pol]["pol_i"],
+            #                                                          -shocked_outputs[pol][shock_name] /
+            #                                                          new_policy_repr[pol]["pol_space"])
+        else:
+            # This method will only work if we are sure that the grid points representing the policy's sparse
+            # representation do not change. Should be feasible with small enough h, but then may run into
+            # numerical differentiation precision issues.
+            curlyDs[shock_name] = forward_step.forward_step_shock_1d(ss["D"], Pi_T, ss_policy_repr[pol]["pol_i"],
+                                                                     -shocked_outputs[pol][shock_name] /
+                                                                     ss_policy_repr[pol]["pol_space"])
+        # 3) and the aggregate outcomes today
+        for o in outputs:
+            curlyYs[o][shock_name] = np.vdot(ss["D"], shocked_outputs[o.lower()][shock_name])
 
-    return curlyV, curlyD, curlyY
+    return curlyVs, curlyDs, curlyYs
 
 
 def get_sparse_ss_policy_repr(ss, policy):
